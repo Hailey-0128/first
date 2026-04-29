@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>切水果 · Fruit Slash</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e1a;
+    font-family: 'Segoe UI', 'PingFang SC', sans-serif;
+    overflow: hidden;
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #game-wrap {
+    position: relative;
+    width: 100vw; height: 100vh;
+  }
+
+  /* 摄像头镜像背景 */
+  #video {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    opacity: 0.55;
+    z-index: 0;
+  }
+
+  /* 游戏 canvas */
+  #canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+  }
+
+  /* HUD */
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+  }
+  .hud-box {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(0,220,255,0.25);
+    border-radius: 14px;
+    padding: 10px 24px;
+    text-align: center;
+    backdrop-filter: blur(8px);
+    min-width: 110px;
+  }
+  .hud-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(0,220,255,0.7);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .hud-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 16px rgba(0,220,255,0.8);
+    line-height: 1;
+  }
+  #timer-val { color: #fff; }
+  #timer-val.urgent { color: #ff4d4d; text-shadow: 0 0 16px rgba(255,80,80,0.9); }
+
+  /* ───── 开始界面 ───── */
+  #start-screen {
+    position: absolute; inset: 0;
+    z-index: 10;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(0,30,60,0.92) 0%, rgba(0,5,20,0.97) 100%);
+  }
+  .title-glow {
+    font-size: clamp(42px, 7vw, 82px);
+    font-weight: 900;
+    letter-spacing: 4px;
+    background: linear-gradient(135deg, #00dcff 0%, #b0f0ff 50%, #00dcff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 24px rgba(0,220,255,0.7));
+    margin-bottom: 8px;
+  }
+  .sub-title {
+    font-size: 16px;
+    color: rgba(0,220,255,0.6);
+    letter-spacing: 6px;
+    margin-bottom: 40px;
+  }
+  .fruit-preview {
+    font-size: 52px;
+    margin-bottom: 36px;
+    animation: bounce 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes bounce {
+    from { transform: translateY(0); }
+    to   { transform: translateY(-12px); }
+  }
+  .info-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(0,220,255,0.2);
+    border-radius: 18px;
+    padding: 24px 40px;
+    text-align: center;
+    backdrop-filter: blur(12px);
+    margin-bottom: 36px;
+    max-width: 480px;
+  }
+  .info-card p {
+    color: rgba(255,255,255,0.75);
+    font-size: 15px;
+    line-height: 2;
+  }
+  .info-card strong { color: #00dcff; }
+  .btn-start {
+    background: linear-gradient(135deg, #00b4d8, #0077b6);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 16px 60px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    cursor: pointer;
+    box-shadow: 0 0 32px rgba(0,180,220,0.5);
+    transition: all 0.2s;
+  }
+  .btn-start:hover {
+    transform: scale(1.06);
+    box-shadow: 0 0 48px rgba(0,220,255,0.7);
+  }
+
+  /* ───── 结算界面 ───── */
+  #end-screen {
+    position: absolute; inset: 0;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(0,30,60,0.93) 0%, rgba(0,5,20,0.97) 100%);
+  }
+  .end-title {
+    font-size: clamp(36px, 6vw, 68px);
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 40px rgba(0,220,255,0.6);
+    margin-bottom: 20px;
+  }
+  .end-score-box {
+    background: rgba(0,220,255,0.08);
+    border: 2px solid rgba(0,220,255,0.35);
+    border-radius: 20px;
+    padding: 32px 80px;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .end-score-label { font-size: 14px; color: rgba(0,220,255,0.7); letter-spacing: 4px; }
+  .end-score-val {
+    font-size: clamp(60px, 10vw, 110px);
+    font-weight: 900;
+    color: #00dcff;
+    text-shadow: 0 0 40px rgba(0,220,255,0.8);
+    line-height: 1.1;
+  }
+  .end-best { font-size: 15px; color: rgba(255,255,255,0.5); margin-bottom: 36px; }
+  .end-best span { color: #ffd700; }
+
+  /* cam status */
+  #cam-status {
+    position: absolute;
+    bottom: 20px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+  #cam-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #888;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  #cam-dot.active { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" style="display:none;">
+    <div class="hud-box">
+      <div class="hud-label">最高分</div>
+      <div class="hud-value" id="best-val">0</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">分数</div>
+      <div class="hud-value" id="score-val">0</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">剩余时间</div>
+      <div class="hud-value" id="timer-val">30</div>
+    </div>
+  </div>
+
+  <!-- 开始界面 -->
+  <div id="start-screen">
+    <div class="title-glow">FRUIT SLASH</div>
+    <div class="sub-title">切 水 果</div>
+    <div class="fruit-preview">🍑 🍓 🍊 🍎</div>
+    <div class="info-card">
+      <p>伸出 <strong>食指</strong> 对准摄像头</p>
+      <p>将食指移动到 <strong>水果上</strong> 即可切中</p>
+      <p>水果从 <strong>四面八方</strong> 飞来，触碰即得分</p>
+      <p>🔴 <strong>大果 +1</strong> &nbsp;|&nbsp; 🟡 <strong>中果 +2</strong> &nbsp;|&nbsp; 🟣 <strong>小果 +3</strong></p>
+      <p>限时 <strong>30 秒</strong>，看看你能得多少分？</p>
+    </div>
+    <button class="btn-start" id="btn-start">开始游戏</button>
+  </div>
+
+  <!-- 结算界面 -->
+  <div id="end-screen">
+    <div class="end-title">时间结束！</div>
+    <div class="end-score-box">
+      <div class="end-score-label">本局得分</div>
+      <div class="end-score-val" id="final-score">0</div>
+    </div>
+    <div class="end-best">历史最高：<span id="best-display">0</span> 分</div>
+    <button class="btn-start" id="btn-restart">再来一局</button>
+  </div>
+
+  <div id="cam-status"><span id="cam-dot"></span><span id="cam-text">摄像头初始化中…</span></div>
+</div>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ─────────────────────────────────────────────
+//  常量 & 状态
+// ─────────────────────────────────────────────
+const GAME_DURATION = 30;     // 秒
+const FRUIT_SPAWN_INTERVAL = 900; // ms（提高生成频率）
+
+// 水果大小配置：大=1分, 中=2分, 小=3分
+const SIZE_CONFIGS = [
+  { label: '大', radius: 54, points: 1, scaleSpeed: 0.012 },
+  { label: '中', radius: 38, points: 2, scaleSpeed: 0.018 },
+  { label: '小', radius: 24, points: 3, scaleSpeed: 0.024 },
+];
+
+const FRUITS = [
+  { name: 'peach',  emoji: '🍑', color: '#FFB347', splash: '#FF8C69' },
+  { name: 'straw',  emoji: '🍓', color: '#FF3355', splash: '#FF6680' },
+  { name: 'orange', emoji: '🍊', color: '#FF9A00', splash: '#FFB74D' },
+  { name: 'apple',  emoji: '🍎', color: '#FF2D2D', splash: '#FF7043' },
+];
+
+let score = 0, bestScore = 0;
+let timeLeft = GAME_DURATION;
+let gameRunning = false;
+
+let fruits = [];
+let particles = [];
+let floatTexts = [];
+let spawnTimer = null;
+let countdownInterval = null;
+
+// 食指位置（canvas 坐标）
+let fingerX = -999, fingerY = -999;
+let fingerTrail = []; // [{x,y}] 最近 20 帧
+
+// ─────────────────────────────────────────────
+//  Canvas 初始化
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const video = document.getElementById('video');
+
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ─────────────────────────────────────────────
+//  MediaPipe Hands
+// ─────────────────────────────────────────────
+const hands = new Hands({
+  locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+});
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.55,
+  minTrackingConfidence: 0.45,
+});
+hands.onResults(onHandResults);
+
+function onHandResults(results) {
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    const lm = results.multiHandLandmarks[0];
+    const tip = lm[8]; // 食指指尖
+    // 镜像：video 已被 CSS scaleX(-1)，landmark.x 也需镜像
+    fingerX = (1 - tip.x) * canvas.width;
+    fingerY = tip.y * canvas.height;
+
+    fingerTrail.push({ x: fingerX, y: fingerY });
+    if (fingerTrail.length > 12) fingerTrail.shift();
+
+    document.getElementById('cam-dot').classList.add('active');
+    document.getElementById('cam-text').textContent = '手势识别中';
+  } else {
+    fingerX = -999; fingerY = -999;
+    fingerTrail = [];
+    document.getElementById('cam-dot').classList.remove('active');
+    document.getElementById('cam-text').textContent = '未检测到手';
+  }
+}
+
+// 摄像头
+const camera = new Camera(video, {
+  onFrame: async () => { await hands.send({ image: video }); },
+  width: 1280, height: 720,
+});
+camera.start().then(() => {
+  document.getElementById('cam-text').textContent = '摄像头已开启';
+}).catch(() => {
+  document.getElementById('cam-text').textContent = '摄像头开启失败';
+});
+
+// ─────────────────────────────────────────────
+//  水果对象
+// ─────────────────────────────────────────────
+function spawnFruit() {
+  if (!gameRunning) return;
+  const type = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+  const sizeConf = SIZE_CONFIGS[Math.floor(Math.random() * SIZE_CONFIGS.length)];
+
+  // 从四面八方生成：0=底部, 1=顶部, 2=左侧, 3=右侧
+  const side = Math.floor(Math.random() * 4);
+  const baseSpeed = 5 + Math.random() * 7; // 随机初速（提高变化范围）
+  let x, y, vx, vy;
+
+  if (side === 0) {
+    // 从底部向上
+    x = sizeConf.radius + Math.random() * (canvas.width - sizeConf.radius * 2);
+    y = canvas.height + sizeConf.radius;
+    vx = (Math.random() - 0.5) * 6;
+    vy = -(canvas.height * 0.020 + Math.random() * canvas.height * 0.012);
+  } else if (side === 1) {
+    // 从顶部向下
+    x = sizeConf.radius + Math.random() * (canvas.width - sizeConf.radius * 2);
+    y = -sizeConf.radius;
+    vx = (Math.random() - 0.5) * 6;
+    vy = baseSpeed * 0.8;
+  } else if (side === 2) {
+    // 从左侧向右
+    x = -sizeConf.radius;
+    y = sizeConf.radius + Math.random() * (canvas.height - sizeConf.radius * 2);
+    vx = baseSpeed;
+    vy = (Math.random() - 0.5) * 5 - 1.5;
+  } else {
+    // 从右侧向左
+    x = canvas.width + sizeConf.radius;
+    y = sizeConf.radius + Math.random() * (canvas.height - sizeConf.radius * 2);
+    vx = -baseSpeed;
+    vy = (Math.random() - 0.5) * 5 - 1.5;
+  }
+
+  fruits.push({
+    type, x, y,
+    vx, vy,
+    side,
+    baseRadius: sizeConf.radius,
+    radius: sizeConf.radius,
+    points: sizeConf.points,
+    sizeLabel: sizeConf.label,
+    scalePhase: Math.random() * Math.PI * 2, // 随机起始相位
+    scaleSpeed: sizeConf.scaleSpeed,
+    scaleAmp: 0.18,  // 缩放幅度 ±18%
+    sliced: false,
+    alpha: 1,
+    rotation: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - 0.5) * 0.12,
+    age: 0,
+  });
+}
+
+// ─────────────────────────────────────────────
+//  粒子
+// ─────────────────────────────────────────────
+function spawnParticles(x, y, color) {
+  for (let i = 0; i < 18; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 6;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 3,
+      alpha: 1,
+      radius: 4 + Math.random() * 5,
+      color,
+      life: 0,
+      maxLife: 35 + Math.random() * 20,
+    });
+  }
+}
+
+function spawnFloatText(x, y, text, points) {
+  const colors = { 1: '#ffdd57', 2: '#00ffcc', 3: '#ff6ef7' };
+  floatTexts.push({ x, y, text, alpha: 1, vy: -2.2, life: 0, color: colors[points] || '#00ffcc' });
+}
+
+// ─────────────────────────────────────────────
+//  碰撞检测
+// ─────────────────────────────────────────────
+function checkCollisions() {
+  if (!gameRunning) return;
+  fruits.forEach(fruit => {
+    if (fruit.sliced) return;
+    const dx = fingerX - fruit.x;
+    const dy = fingerY - fruit.y;
+    if (Math.sqrt(dx * dx + dy * dy) < fruit.radius + 16) {
+      sliceFruit(fruit);
+    }
+  });
+}
+
+function sliceFruit(fruit) {
+  fruit.sliced = true;
+  score += fruit.points;
+  document.getElementById('score-val').textContent = score;
+  spawnParticles(fruit.x, fruit.y, fruit.type.splash);
+  spawnFloatText(fruit.x, fruit.y - fruit.radius, '+' + fruit.points, fruit.points);
+  // 切开后两半飞出
+  for (let side of [-1, 1]) {
+    particles.push({
+      x: fruit.x, y: fruit.y,
+      vx: side * (3 + Math.random() * 3),
+      vy: -(2 + Math.random() * 4),
+      alpha: 1,
+      radius: fruit.radius * 0.65,
+      color: fruit.type.color,
+      isHalf: true,
+      emoji: fruit.type.emoji,
+      life: 0, maxLife: 50,
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
+//  绘制函数
+// ─────────────────────────────────────────────
+function drawFruitEmoji(fruit) {
+  ctx.save();
+  ctx.translate(fruit.x, fruit.y);
+  ctx.rotate(fruit.rotation);
+  ctx.globalAlpha = fruit.alpha;
+
+  // 光晕
+  const grd = ctx.createRadialGradient(0, 0, fruit.radius * 0.3, 0, 0, fruit.radius * 1.3);
+  grd.addColorStop(0, fruit.type.color + 'aa');
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(0, 0, fruit.radius * 1.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font = `${fruit.radius * 1.7}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(fruit.type.emoji, 0, 2);
+  ctx.restore();
+}
+
+function drawFingerCursor() {
+  if (fingerX < 0) return;
+  // 轨迹
+  if (fingerTrail.length > 2) {
+    ctx.save();
+    for (let i = 1; i < fingerTrail.length; i++) {
+      const t = i / fingerTrail.length;
+      ctx.beginPath();
+      ctx.strokeStyle = `rgba(0,220,255,${t * 0.5})`;
+      ctx.lineWidth = t * 5;
+      ctx.lineCap = 'round';
+      ctx.moveTo(fingerTrail[i - 1].x, fingerTrail[i - 1].y);
+      ctx.lineTo(fingerTrail[i].x, fingerTrail[i].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // 指尖发光圆
+  ctx.save();
+  const grad = ctx.createRadialGradient(fingerX, fingerY, 2, fingerX, fingerY, 22);
+  grad.addColorStop(0, 'rgba(0,240,255,0.95)');
+  grad.addColorStop(0.4, 'rgba(0,200,255,0.5)');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(fingerX, fingerY, 22, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#00dcff';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = '#00dcff';
+  ctx.shadowBlur = 12;
+  ctx.beginPath();
+  ctx.arc(fingerX, fingerY, 10, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────────
+//  主游戏循环
+// ─────────────────────────────────────────────
+function gameLoop() {
+  if (!gameRunning) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const gravity = 0.38;
+
+  // ── 更新 & 绘制水果
+  fruits = fruits.filter(f => f.alpha > 0.01);
+  fruits.forEach(fruit => {
+    if (!fruit.sliced) {
+      fruit.vy += gravity;
+      fruit.x += fruit.vx;
+      fruit.y += fruit.vy;
+      fruit.rotation += fruit.rotSpeed;
+      fruit.age++;
+
+      // 缩放动画（正弦波脉动）
+      fruit.scalePhase += fruit.scaleSpeed;
+      fruit.radius = fruit.baseRadius * (1 + Math.sin(fruit.scalePhase) * fruit.scaleAmp);
+
+      // 超出屏幕（适配四面）
+      const pad = fruit.baseRadius + 120;
+      if (fruit.y > canvas.height + pad || fruit.y < -pad ||
+          fruit.x < -pad || fruit.x > canvas.width + pad) {
+        fruit.alpha = 0;
+      }
+      drawFruitEmoji(fruit);
+    } else {
+      fruit.alpha -= 0.04;
+    }
+  });
+
+  // ── 粒子
+  particles = particles.filter(p => p.alpha > 0.02);
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.25;
+    p.life++;
+    p.alpha = 1 - p.life / p.maxLife;
+
+    ctx.save();
+    ctx.globalAlpha = p.alpha;
+    if (p.isHalf) {
+      ctx.font = `${p.radius * 1.5}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.emoji, p.x, p.y);
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  });
+
+  // ── 浮动得分文字
+  floatTexts = floatTexts.filter(t => t.alpha > 0.02);
+  floatTexts.forEach(t => {
+    t.y += t.vy;
+    t.life++;
+    t.alpha = Math.max(0, 1 - t.life / 55);
+    ctx.save();
+    ctx.globalAlpha = t.alpha;
+    ctx.font = 'bold 36px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = t.color || '#00ffcc';
+    ctx.shadowColor = t.color || '#00ffcc';
+    ctx.shadowBlur = 16;
+    ctx.fillText(t.text, t.x, t.y);
+    ctx.restore();
+  });
+
+  // ── 指尖
+  drawFingerCursor();
+
+  // ── 碰撞
+  checkCollisions();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ─────────────────────────────────────────────
+//  游戏控制
+// ─────────────────────────────────────────────
+function startGame() {
+  score = 0;
+  timeLeft = GAME_DURATION;
+  fruits = [];
+  particles = [];
+  floatTexts = [];
+  gameRunning = true;
+
+  document.getElementById('score-val').textContent = '0';
+  document.getElementById('timer-val').textContent = '30';
+  document.getElementById('timer-val').classList.remove('urgent');
+  document.getElementById('best-val').textContent = bestScore;
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('start-screen').style.display = 'none';
+  document.getElementById('end-screen').style.display = 'none';
+
+  // 生成水果定时器
+  spawnFruit();
+  spawnTimer = setInterval(spawnFruit, FRUIT_SPAWN_INTERVAL);
+
+  // 倒计时
+  countdownInterval = setInterval(() => {
+    timeLeft--;
+    document.getElementById('timer-val').textContent = timeLeft;
+    if (timeLeft <= 8) {
+      document.getElementById('timer-val').classList.add('urgent');
+    }
+    if (timeLeft <= 0) {
+      endGame();
+    }
+  }, 1000);
+
+  gameLoop();
+}
+
+function endGame() {
+  gameRunning = false;
+  clearInterval(spawnTimer);
+  clearInterval(countdownInterval);
+
+  if (score > bestScore) bestScore = score;
+
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('best-display').textContent = bestScore;
+  document.getElementById('end-screen').style.display = 'flex';
+}
+
+// ─────────────────────────────────────────────
+//  按钮事件
+// ─────────────────────────────────────────────
+document.getElementById('btn-start').addEventListener('click', startGame);
+document.getElementById('btn-restart').addEventListener('click', startGame);
+</script>
+</body>
+</html>
